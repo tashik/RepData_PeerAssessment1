@@ -3,18 +3,166 @@
 
 ## Loading and preprocessing the data
 
+Let's start with loading our data in a dataframe. It is stored in a comma-separated-value (CSV) file withing a zip, so to load it we need 
+```{r load, echo=TRUE}
+unzip("activity.zip", files=c("activity.csv"))
+dset<-read.csv("activity.csv")
 
+class(dset)
+head(dset)
+names(dset)
+```
+
+We get a dset variable of class data.frame with three columns, named steps, date and interval.
+
+Now a bit of preprocessing: convert steps and interval to numeric and date to date object
+
+```{r preproc, echo=TRUE}
+dset$steps = as.numeric(dset$steps)
+dates = strptime(dset$date, format="%Y-%m-%d")
+dset$interval = as.numeric(dset$interval)
+```
 
 ## What is mean total number of steps taken per day?
 
+First of all to get the basic overview of the dataset let's create a fast histogram to show the dynamics of total number of steps depending on the date ignoring NA values.
 
+```{r histsum, echo=TRUE}
+totals<-tapply(dset$steps,dset$date,sum)
+Sys.setlocale(locale = "C")
+plot(strptime(names(totals), format="%Y-%m-%d"), 
+     totals,
+     type="h",
+     lwd=3,
+     col="red", 
+     xlab="Date",
+     ylab="Steps",
+     main="Steps Number by Date")
+
+stepsMean<-as.character(round(mean(totals, na.rm=TRUE)))
+stepsMedian<-as.character(median(totals, na.rm=TRUE))
+```
+We can see the mean total steps per day as **`r stepsMean`** and the median as **`r stepsMedian`**.
 
 ## What is the average daily activity pattern?
 
+To see teh average daily activity pattern we will use a plot to compare the average step number during 5-minute intervals market with the number of interval last minute accross all the available dates. 
 
+```{r avgDaily, echo=TRUE}
+avgs<-tapply(dset$steps, dset$interval, mean, na.rm=TRUE)
+
+plot(names(avgs), 
+     avgs,
+     type="l",
+     lwd=1,
+     col="blue", 
+     xlab="Interval",
+     ylab="Avg.Steps",
+     main="Dayly Activity Pattern")
+```
+
+We get a plot with one peak between 500 and 1000 minute. Let's find out, which interval during a day has the maximum average number of steps:
+
+```{r maxNumInterval, echo=TRUE}
+maxStepsPerInterval <- max(avgs)
+
+maxIntervalNumber <- names(avgs)[sapply(avgs, function(x) all(x==maxStepsPerInterval))]
+
+mINEnd<-as.numeric(maxIntervalNumber)
+mINStart<-mINEnd-5
+
+hoursStart<-floor(mINStart/60)
+hoursEnd<-floor(mINEnd/60)
+
+minsStart<-mINStart%%60
+minsEnd<-mINEnd%%60
+
+maxActiveInterval <- paste(paste(hoursStart, minsStart, sep=":"), paste(hoursEnd, minsEnd, sep=":"), sep=" - ")
+
+```
+So the most active interaval is **`r maxActiveInterval`** in terms of our dataset enumeration - the interval with number **`r maxIntervalNumber`**.
 
 ## Imputing missing values
 
+```{r numMissing, echo=TRUE}
+incompleteCases<-nrow(dset)-sum(complete.cases(dset$steps))
+```
 
+In our dataset we have quite a good deal of missing values for steps. The total number of incomplete cases is **`r incompleteCases`**.
+
+Let's fill the missing values with the average number of steps per the interval among all days and make a new histogram from what we receive.
+
+```{r, echo=TRUE}
+dset_new<-data.frame();
+
+for(i in 1:nrow(dset)) {
+  row <- dset[i,]
+  if(is.na(row$steps)) {
+    row$date
+    row$interval
+    avg<-as.numeric(avgs[as.character(row$interval)])
+    row$steps<-round(avg)
+  }
+  dset_new<-rbind(dset_new, row)
+}
+
+new_totals<-tapply(dset_new$steps,dset_new$date,sum)
+
+plot(strptime(names(new_totals), format="%Y-%m-%d"), 
+     new_totals,
+     type="h",
+     lwd=3,
+     col="red", 
+     xlab="Date",
+     ylab="Steps",
+     main="Steps Number by Date")
+```
+
+As we can see, them main tendency in the plot is the same, but we now have no missing lines. What's about mean and median for our new dataset containing no missing values?
+
+```{r, echo=TRUE}
+stepsNewMean<-as.character(round(mean(new_totals)))
+stepsNewMedian<-as.character(median(new_totals))
+```
+
+We can see that the mean total steps per day remains the same **`r stepsNewMean`** while the median has moved a bit  **`r stepsNewMedian`** comparing with **`r stepsMedian`** (perhaps because we previously removed NA values when calculating median).
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+Now let's try to examine the difference in activity patterns between weekdays and weekends and show it on a plot.
+
+```{r, echo=TRUE}
+wd <- weekdays(dates)
+
+dset_new$weekdays = wd
+
+dset_new[((dset_new[,4] == "Saturday")|(dset_new[,4]=="Sunday")),"wd"] <- "weekend"
+dset_new[(!((dset_new[,4] == "Saturday")|(dset_new[,4]=="Sunday"))),"wd"] <- "weekday"
+
+dset_wd<-dset_new[dset_new$wd=="weekday",]
+dset_wend<-dset_new[dset_new$wd=="weekend",]
+
+wd_avgs<-tapply(dset_wd$steps, dset_wd$interval, mean)
+wend_avgs<-tapply(dset_wend$steps, dset_wend$interval, mean)
+
+par(mfrow=c(2,1))
+
+plot(names(wd_avgs),
+     wd_avgs,
+     type="l",
+     lwd=1,
+     col="blue", 
+     xlab="Inteval",
+     ylab="Number of Steps",
+     main="Weekday")
+
+plot(names(wend_avgs),
+     wend_avgs,
+     type="l",
+     lwd=1,
+     col="blue", 
+     xlab="Inteval",
+     ylab="Number of Steps",
+     main="Weekend")
+````
+We can obviously make a conclusion that weekend are averagely more active.
